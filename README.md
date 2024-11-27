@@ -10,3 +10,5 @@ Rust bindings for [Frida](https://frida.re).
 Or: use the `auto-download` feature to install Frida.
 
 See the documentation for usage instructions.
+
+Download and move the bin to /data/local/tmp and run it.
