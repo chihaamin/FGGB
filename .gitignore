@@ -3,4 +3,3 @@ build.cmd
 luarc.json
 libfrida-core.a
 script.lua
-/src/bind.rs
