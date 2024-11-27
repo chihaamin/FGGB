@@ -1,8 +1,10 @@
 [package]
-name = "GGBind"
+name = "FGGB"
 version = "0.1.0"
 edition = "2021"
-
+authors = ["XEKEX <amin.chiha@gmail.com>"]
+repository = "https://github.com/chihaamin/FGGB"
+description = "Rusty Frida Bridge for GG Scripts"
 
 [dependencies]
 thiserror = "1"
