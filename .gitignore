@@ -1,5 +1,5 @@
 /target
 build.cmd
-luarc.json
+.luarc.json
 libfrida-core.a
 script.lua
