@@ -1,8 +1,0 @@
-{
-    "workspace.library": [
-        "c:\\Users\\aminc\\.vscode\\extensions\\droidxrx.gameguardian-lua-0.0.5\\EmmyLua"
-    ],
-    "diagnostics.disable": [
-        "inject-field"
-    ]
-}
