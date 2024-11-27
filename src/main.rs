@@ -17,7 +17,7 @@
 mod bindings {
     include!("./bind.rs");
 }
-
+// bind support aarch64 only!
 mod bind;
 pub use bind::*;
 use std::ffi::CStr;
@@ -120,32 +120,26 @@ static FRIDA: LazyLock<Frida> = LazyLock::new(|| unsafe { Frida::obtain() });
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // let processes = local_device.enumerate_processes();
-    // for process in local_device.enumerate_processes() {
-    //     println!("{} {}", process.get_pid(), process.get_name());
-    // }
-    // Create a TCP listener
+    // TCP listener
     let listener = TcpListener::bind("127.0.0.1:6699").await?;
     println!("XEKEX Server listening on http://localhost:6699");
 
-    // Loop to accept incoming connections
     loop {
         let (mut socket, _addr) = listener.accept().await?;
         // Spawn a new task to handle the connection
 
         tokio::spawn(async move {
-            // Read the request into a buffer
+            // Read the buffer
+
             let mut buffer = vec![0; 1024];
             match socket.read(&mut buffer).await {
-                Ok(n) if n == 0 => return, // Connection was closed
+                Ok(n) if n == 0 => return, // Connection closed
                 Ok(n) => {
                     let request = String::from_utf8_lossy(&buffer[..n]);
 
-                    // Parse the request into headers and body
+                    // Parse the request
                     if let Some((method, path)) = parse_method_and_path(&request) {
-                        // If it's a POST request, read the raw body
                         if method == "POST" {
-                            // Assume the body starts after the headers
                             if let Some(body_start) = request.find("\r\n\r\n") {
                                 let body = &request[(body_start + 4)..]; // Skip past the headers
 
@@ -206,10 +200,9 @@ fn start_frida_bindings(pid: u32, script: &str) -> Option<(i32, String)> {
             println!("Session is detached");
             return None;
         }
-        // we clone the body for static script
-        let script_source = script;
+
         let mut script_option = script::ScriptOption::default();
-        let script = match session.create_script(script_source, &mut script_option) {
+        let script = match session.create_script(script, &mut script_option) {
             Ok(s) => s,
             Err(err) => {
                 println!("{}", err);
@@ -217,8 +210,6 @@ fn start_frida_bindings(pid: u32, script: &str) -> Option<(i32, String)> {
             }
         };
         script.load().unwrap();
-
-        //info log in response
 
         let mut package = String::new();
         if let Some((_, (_, p))) = apps.iter().enumerate().find(|(_, (num, _))| *num == pid) {
