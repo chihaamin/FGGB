@@ -3,6 +3,8 @@ It is a work-around to be able to run frida script from GG script. ( still requi
 
 Using Rust bindings for [Frida](https://frida.re).[![docs.rs](https://docs.rs/frida/badge.svg)](https://docs.rs/frida)
 
+# NOTE: ARCH64 support only
+
 # Usage
 just Download [Magisk-FGGB](https://github.com/chihaamin/FGGB-Magisk) or Download the binary in release and run it using adb or termux.
 
