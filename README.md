@@ -1,5 +1,6 @@
 # Frida GameGuardian Bridge (FGGB)
-It is a work-around to be able to run frida script from GG script. ( still require frida-server to be running use [Magisk-Frida](https://github.com/ViRb3/magisk-frida) )
+It is a work-around to be able to run frida script from GG script. ( still require frida-server to be running use [Magisk-Frida](https://github.com/ViRb3/magisk-frida) ) 
+
 Using Rust bindings for [Frida](https://frida.re).[![docs.rs](https://docs.rs/frida/badge.svg)](https://docs.rs/frida)
 
 # Usage
