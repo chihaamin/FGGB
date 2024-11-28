@@ -1,4 +1,4 @@
-# Frida [![docs.rs](https://docs.rs/frida/badge.svg)](https://docs.rs/frida) GameGuardian Scripts Bridge
+# Frida [![docs.rs](https://docs.rs/frida/badge.svg)](https://docs.rs/frida) GameGuardian Bridge
 
 Using Rust bindings for [Frida](https://frida.re).
 
