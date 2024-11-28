@@ -5,7 +5,7 @@ Using Rust bindings for [Frida](https://frida.re).
 just Download [Magisk-FGGB](https://github.com/chihaamin/FGGB-Magisk) or Download the binary in release and run it using adb or termux.
 
 Boilerplate GG Script : 
-'''```lua
+'''```code
 local pid = gg.getTargetInfo().pid
 local script = [[console.log(Process.id)]]
 
