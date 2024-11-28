@@ -4,6 +4,8 @@
  * Licence: wxWindows Library Licence, Version 3.1
  */
 
+use tokio::time::error;
+
 use crate::bind;
 
 use std::collections::HashMap;
@@ -126,7 +128,7 @@ impl<'a> Device<'a> {
     }
 
     /// Returns all processes.
-    pub fn enumerate_processes<'b>(&'a self) -> Vec<Process<'b>>
+    pub fn enumerate_processes<'b>(&'a self) -> Result<Vec<Process<'b>>>
     where
         'a: 'b,
     {
@@ -142,7 +144,9 @@ impl<'a> Device<'a> {
             )
         };
 
-        if error.is_null() {
+        if !error.is_null() {
+            return Err(Error::ProcessesEnumerationFailed);
+        } else {
             let num_processes = unsafe { bind::frida_process_list_size(processes_ptr) };
             processes.reserve(num_processes as usize);
 
@@ -154,7 +158,7 @@ impl<'a> Device<'a> {
         }
 
         unsafe { bind::frida_unref(processes_ptr as _) };
-        processes
+        Ok(processes)
     }
 
     /// Creates [`Session`] and attaches the device to the current PID.

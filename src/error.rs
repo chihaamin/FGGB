@@ -17,6 +17,10 @@ pub enum Error {
     #[error("Failed to lookup device")]
     DeviceLookupFailed,
 
+    /// Failled to enumerate a processes.
+    #[error("Failed to lookup device")]
+    ProcessesEnumerationFailed,
+
     /// Failed to detach a session.
     #[error("Failed to detach the current session")]
     SessionDetachError,
