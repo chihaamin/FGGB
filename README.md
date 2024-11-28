@@ -2,7 +2,7 @@
 is a workaround to be able to run frida script from GG script.
 Using Rust bindings for [Frida](https://frida.re).[![docs.rs](https://docs.rs/frida/badge.svg)](https://docs.rs/frida)
 
-##Usage
+# Usage
 just Download [Magisk-FGGB](https://github.com/chihaamin/FGGB-Magisk) or Download the binary in release and run it using adb or termux.
 
 Boilerplate GG Script : 
