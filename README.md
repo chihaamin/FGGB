@@ -11,7 +11,7 @@ Boilerplate GG Script :
 local pid = gg.getTargetInfo().pid
 local script = [[console.log(Process.id)]]
 
-local req = gg.makeRequest(
+local req = gg.makeRequest( --http://localhost:6699 is the default endpoint
     string.format("http://localhost:6699?pid=%d&GG=%s", pid, gg.PACKAGE),
     {
         ["content-length"] = script:len(),
