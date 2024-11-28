@@ -8,10 +8,17 @@ just Download [Magisk-FGGB](https://github.com/chihaamin/FGGB-Magisk) or Downloa
 
 Boilerplate GG Script : 
 ```lua
+--[[
+http://localhost:6699: is the default endpoint accept only POST request ( for now )
+pid: is the target pid you want to inject ur script into
+GG: is GameGuardian package name
+["content-length"] is mendatory
+["user-agent"] = gg.PACKAGE will be mendatory in further releases
+]]
 local pid = gg.getTargetInfo().pid
 local script = [[console.log(Process.id)]]
 
-local req = gg.makeRequest( --http://localhost:6699 is the default endpoint
+local req = gg.makeRequest( 
     string.format("http://localhost:6699?pid=%d&GG=%s", pid, gg.PACKAGE),
     {
         ["content-length"] = script:len(),
