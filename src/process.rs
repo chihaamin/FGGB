@@ -167,3 +167,43 @@ impl<'a> Drop for SpawnOptions<'a> {
         unsafe { bind::frida_unref(self.options_ptr as _) }
     }
 }
+
+pub fn enumerate_processes(device: &crate::Device) -> crate::Result<Vec<(u32, String)>> {
+    let mut result = vec![];
+    let procs;
+
+    match device.enumerate_processes() {
+        Ok(p) => procs = p,
+        Err(e) => return Err(e),
+    }
+
+    for process in procs {
+        result.push((process.get_pid(), String::from(process.get_name())))
+    }
+    Ok(result)
+}
+
+pub async fn get_pid(app_package: &str) -> Option<u32> {
+    let output = tokio::process::Command::new("ps")
+        .arg("-A")
+        .stdout(std::process::Stdio::piped())
+        .output()
+        .await
+        .ok()?;
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+
+    for line in output_str.lines() {
+        if line.contains(app_package) {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+
+            if let Some(pid_str) = parts.get(1) {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    return Some(pid);
+                }
+            }
+        }
+    }
+
+    None
+}

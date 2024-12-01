@@ -4,8 +4,6 @@
  * Licence: wxWindows Library Licence, Version 3.1
  */
 
-use tokio::time::error;
-
 use crate::bind;
 
 use std::collections::HashMap;

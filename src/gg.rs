@@ -1,93 +1,112 @@
-pub fn find_pkg() -> Option<String> {
-    let base_dir = "/data/data/";
-
-    match explore_app_packages(base_dir) {
-        Ok(p) => return Some(p),
-        Err(_) => return None,
+use tokio::time::Duration;
+#[derive(Debug)]
+pub struct GameGuardian {
+    pub package: String,
+    pub path: String,
+    pid: Option<u32>,
+}
+impl GameGuardian {
+    fn new(package: String, path: String, pid: Option<u32>) -> Self {
+        GameGuardian { package, path, pid }
     }
 }
-use std::fs;
-use std::path::Path;
-fn explore_app_packages(base_dir: &str) -> Result<String, std::io::Error> {
-    let entries = fs::read_dir(base_dir)?;
-    let mut pkg: String = String::from("");
 
-    for entry in entries.filter_map(Result::ok) {
-        let app_package = entry.file_name().into_string().unwrap_or_default();
-
-        if app_package.starts_with('.') || app_package.is_empty() {
-            continue;
+pub async fn watchdog(mut channel: Channel<String>) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Watching for GameGuardian...");
+    let mut gg: GameGuardian;
+    match configure() {
+        Ok(conf) => {
+            gg = GameGuardian::new(conf.gg_package, conf.path, None);
+            println!("{:?}", gg)
         }
-
-        let app_files_dir = Path::new(base_dir).join(&app_package).join("files");
-
-        if !app_files_dir.exists() && !app_files_dir.is_dir() {
-            continue;
-        }
-
-        if let Some(p) = traverse_files(&app_files_dir, &app_package) {
-            pkg = String::from(&p);
-        }
+        Err(e) => return Err(Box::new(e)),
     }
-    Ok(pkg)
+
+    loop {
+        let pid = get_pid(&gg.package).await;
+        if let Some(pid) = pid {
+            gg.pid = Some(pid);
+            process_logic(pid).await;
+
+            if let Err(e) = wait_for_process_to_terminate(pid).await {
+                eprintln!("Error while waiting for GameGuardian termination: {}", e);
+            }
+
+            println!("GameGuardian::PID {} terminated. Resuming watchdog...", pid);
+        }
+
+        // listen for incoming data
+        if let Some(message) = channel.receive().await {
+            println!("Received message from socket server: {}", message);
+            let _ = channel
+                .send(Pipe {
+                    msg: (format!("Processed message: {}", message)),
+                    payload: (format!("")),
+                })
+                .await?;
+        }
+
+        tokio::time::sleep(Duration::from_secs(1)).await; // Polling interval
+    }
 }
 
-fn traverse_files(dir: &Path, app_package: &str) -> Option<String> {
-    let mut result: Option<String> = None;
-    if !dir.exists() || !dir.is_dir() {
-        return None;
-    }
-
-    let mut version_found = false;
-    let mut lib_found = false;
-
-    for entry in fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        let entry_path = entry.path();
-
-        if entry_path.is_dir() {
-            match traverse_files(&entry_path, app_package) {
-                Some(p) => return Some(p),
-                None => (),
-            };
-        } else {
-            if entry_path.ends_with("version.gg") {
-                version_found = true;
-            }
-            if entry_path.ends_with("lib01.so") {
-                lib_found = true;
-            }
-        }
-
-        if version_found && lib_found {
-            result = Some(app_package.to_owned());
-            return result;
-        }
-    }
-    result
+async fn process_logic(_pid: u32) {
+    todo!();
 }
 
-use std::process::{Command, Stdio};
-pub fn get_pid(app_package: &str) -> Option<u32> {
-    let output = Command::new("ps")
-        .arg("-A")
-        .stdout(Stdio::piped())
-        .output()
-        .ok()?;
+async fn wait_for_process_to_terminate(pid: u32) -> Result<(), Box<dyn std::error::Error>> {
+    // Simulate waiting for a process to terminate
+    println!("Waiting for process PID {} to terminate...", pid);
 
-    let output_str = String::from_utf8_lossy(&output.stdout);
+    // Replace this with actual process monitoring logic using system APIs or crates
+    // This is a simulation of waiting
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
-    for line in output_str.lines() {
-        if line.contains(app_package) {
-            let parts: Vec<&str> = line.split_whitespace().collect();
+    // Log process termination
+    println!("Process PID {} has terminated.", pid);
+    Ok(())
+}
 
-            if let Some(pid_str) = parts.get(1) {
-                if let Ok(pid) = pid_str.parse::<u32>() {
-                    return Some(pid);
-                }
-            }
-        }
+use crate::{
+    configure, enumerate_processes, error, frida, get_pid, script, Channel, DeviceManager, Message,
+    Pipe, ScriptHandler, FRIDA,
+};
+
+use std::thread;
+fn invoke(pid: u32) -> frida::Result<Handler> {
+    let device_manager = DeviceManager::obtain(&FRIDA);
+    let local_device = device_manager.get_remote_device("localhost")?;
+
+    let _apps = enumerate_processes(&local_device)?;
+
+    let session = local_device.attach(pid)?;
+
+    if session.is_detached() {
+        return Err(error::Error::SessionDetachError);
     }
 
-    None
+    let mut script_option = script::ScriptOption::default();
+    let script_src = r#""#; // payload
+
+    let mut script = session.create_script(script_src, &mut script_option)?;
+
+    script.load()?;
+    let msg_handler = script.handle_message(Handler);
+    if let Err(err) = msg_handler {
+        panic!("{:?}", err);
+    }
+    for _ in 0..2 {
+        thread::sleep(Duration::from_secs(1));
+        println!("{:?}", script.list_exports().unwrap());
+    }
+
+    Ok(Handler)
+}
+
+struct Handler;
+
+impl ScriptHandler for Handler {
+    fn on_message(&mut self, message: &Message) {
+        println!("- {:?}", message);
+    }
 }
