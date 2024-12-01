@@ -25,6 +25,7 @@ pub fn configure() -> Result<Config> {
 
         // Validate the deserialized configuration
         if !validate_config(&config) {
+            let _ = fs::remove_file(&json_path).expect("Failed to remove old Config.json.");
             return Ok(reconf(&json_path))?;
         }
         return Ok(config);
@@ -37,7 +38,7 @@ fn reconf(json_path: &PathBuf) -> Result<Config> {
         Some((pkg, path)) => {
             let config = Config {
                 gg_package: pkg,
-                path: String::from(path.to_str().unwrap()),
+                path,
             };
             let json_content =
                 serde_json::to_string_pretty(&config).expect("Failed to serialize Config.json.");
@@ -56,8 +57,8 @@ fn reconf(json_path: &PathBuf) -> Result<Config> {
 fn validate_config(config: &Config) -> bool {
     !config.gg_package.is_empty() && !config.path.is_empty()
 }
-fn traverse_files(dir: &Path, app_package: &str) -> Option<(String, PathBuf)> {
-    let mut result: Option<(String, PathBuf)> = None;
+fn traverse_files(dir: &Path, app_package: &str) -> Option<String> {
+    let mut result: Option<String> = None;
     if !dir.exists() || !dir.is_dir() {
         return None;
     }
@@ -71,7 +72,7 @@ fn traverse_files(dir: &Path, app_package: &str) -> Option<(String, PathBuf)> {
 
         if entry_path.is_dir() {
             match traverse_files(&entry_path, app_package) {
-                Some((pkg, path)) => return Some((pkg, path)),
+                Some(pkg) => return Some(pkg),
                 None => (),
             };
         } else {
@@ -84,13 +85,13 @@ fn traverse_files(dir: &Path, app_package: &str) -> Option<(String, PathBuf)> {
         }
 
         if version_found && lib_found {
-            result = Some((String::from(app_package), entry_path));
+            result = Some(String::from(app_package));
             return result;
         }
     }
     result
 }
-fn explore_app_packages(base_dir: &str) -> result::Result<(String, PathBuf), std::io::Error> {
+fn explore_app_packages(base_dir: &str) -> result::Result<(String, String), std::io::Error> {
     let entries = fs::read_dir(base_dir)?;
     // let mut pkg: String = String::from("");
 
@@ -107,8 +108,8 @@ fn explore_app_packages(base_dir: &str) -> result::Result<(String, PathBuf), std
             continue;
         }
 
-        if let Some((pkg, path)) = traverse_files(&app_files_dir, &app_package) {
-            return Ok((pkg, path));
+        if let Some(pkg) = traverse_files(&app_files_dir, &app_package) {
+            return Ok((pkg, app_package));
         }
     }
     Err(std::io::Error::new(
@@ -117,11 +118,11 @@ fn explore_app_packages(base_dir: &str) -> result::Result<(String, PathBuf), std
     ))
 }
 
-fn find_pkg() -> Option<(String, PathBuf)> {
+fn find_pkg() -> Option<(String, String)> {
     let base_dir = "/data/data/";
 
     match explore_app_packages(base_dir) {
-        Ok((pkg, path)) => return Some((pkg, path)),
+        Ok((pkg, path)) => return Some((pkg, format!("{}{}/", base_dir, path))),
         Err(_) => return None,
     }
 }
