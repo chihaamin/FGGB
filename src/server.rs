@@ -12,82 +12,82 @@ pub async fn run(channel: Channel<Pipe<String>>) -> Result<(), Box<dyn std::erro
         let (socket, _) = listener.accept().await?;
         tokio::spawn({
             let mut ch = channel.clone();
+            let mut stream = tokio::io::BufReader::new(socket);
             async move {
                 let mut buf = vec![0; 1024];
-                let mut stream = tokio::io::BufReader::new(socket);
-                loop {
-                    let n = match stream.read(&mut buf).await {
-                        Ok(n) if n == 0 => break, // Connection closed
-                        Ok(n) => n,
-                        Err(_) => break,
-                    };
+                let n = match stream.read(&mut buf).await {
+                    Ok(n) if n == 0 => return, // Connection closed
+                    Ok(n) => n,
+                    Err(_) => return,
+                };
 
-                    let request = String::from_utf8_lossy(&buf[..n]);
+                let request = String::from_utf8_lossy(&buf[..n]);
 
-                    if let Some((method, path)) = parse_method_and_path(&request) {
-                        if method == "POST" {
-                            if let Some(body_start) = request.find("\r\n\r\n") {
-                                let body = &request[(body_start + 4)..];
+                if let Some((method, path)) = parse_method_and_path(&request) {
+                    if method == "POST" {
+                        if let Some(body_start) = request.find("\r\n\r\n") {
+                            let body = &request[(body_start + 4)..];
 
-                                if body.len() == 0 {
-                                    stream.write_all(format!(
+                            if body.len() == 0 {
+                                stream.write_all(format!(
                                             "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nNo Script Provided!").as_bytes()).await.unwrap();
-                                }
+                            }
 
-                                // Parse query
+                            // Parse query
 
-                                if let Some(query) = path.split('?').nth(1) {
-                                    let params = parse_query_params(query);
-                                    if let Some(app_pid) = params.get("pid") {
-                                        let message = String::from(app_pid);
-                                        let _ = ch
-                                            .send(Pipe {
-                                                msg: MsgType::Socket,
-                                                payload: message.clone(),
-                                            })
-                                            .await;
-                                    } else {
-                                        stream.write_all(format!(
+                            if let Some(query) = path.split('?').nth(1) {
+                                let params = parse_query_params(query);
+                                if let Some(app_pid) = params.get("pid") {
+                                    let message = String::from(app_pid);
+                                    let _ = ch
+                                        .send(Pipe {
+                                            msg: MsgType::Socket,
+                                            payload: message.clone(),
+                                        })
+                                        .await;
+                                } else {
+                                    stream.write_all(format!(
                                             "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nNo Pid Provided!").as_bytes()).await.unwrap();
-                                    }
                                 }
+                            }
 
-                                match start_frida_bindings(0, body) {
-                                    Ok((status, package)) => {
-                                        stream.write_all(format!(
+                            match start_frida_bindings(0, body) {
+                                Ok((status, package)) => {
+                                    stream.write_all(format!(
                                                 "HTTP/1.1 {} ok\r\nContent-Type: text/plain\r\n\r\nScript Loaded in {} Successfully",
                                                 status,package
                                             ).as_bytes()).await.unwrap();
-                                    }
-                                    Err(kind) => {
-                                        stream.write_all(format!(
+                                }
+                                Err(kind) => {
+                                    stream.write_all(format!(
                                                 "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\n{}",
                                                 kind
                                             ).as_bytes()).await.unwrap();
-                                    }
                                 }
                             }
+                            let _ = stream.shutdown().await;
+                            return;
                         }
-                    } else {
-                        stream.write_all("ok".as_bytes()).await.unwrap();
                     }
+                } else {
+                    stream.write_all("ok".as_bytes()).await.unwrap();
+                }
 
-                    let message = String::from_utf8_lossy(&buf[..n]).to_string();
+                let message = String::from_utf8_lossy(&buf[..n]).to_string();
 
-                    let _ = ch.send(Pipe {
-                        msg: MsgType::POST,
-                        payload: message,
-                    });
+                let _ = ch.send(Pipe {
+                    msg: MsgType::POST,
+                    payload: message,
+                });
 
-                    if let Some(message) = ch.receive().await {
-                        println!("Received message from GG watchdog: {}", message);
-                        let _ = ch
-                            .send(Pipe {
-                                msg: MsgType::Socket,
-                                payload: (format!("")),
-                            })
-                            .await;
-                    }
+                if let Some(message) = ch.receive().await {
+                    println!("Received message from GG watchdog: {}", message);
+                    let _ = ch
+                        .send(Pipe {
+                            msg: MsgType::Socket,
+                            payload: (format!("")),
+                        })
+                        .await;
                 }
             }
         });
