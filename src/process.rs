@@ -187,8 +187,7 @@ pub async fn get_pid(app_package: &str) -> Option<u32> {
     let output = tokio::process::Command::new("ps")
         .arg("-A")
         .stdout(std::process::Stdio::piped())
-        .output()
-        .await
+        .output().await
         .ok()?;
 
     let output_str = String::from_utf8_lossy(&output.stdout);

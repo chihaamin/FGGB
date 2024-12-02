@@ -1,5 +1,11 @@
-use tokio::time::Duration;
-#[derive(Debug)]
+use tokio::time::{sleep, Duration};
+
+use crate::{
+    configure, enumerate_processes, error, frida, get_pid, script, Channel, DeviceManager, Message,
+    MsgType, Pipe, ScriptHandler, FRIDA,
+};
+
+#[derive(Debug, Clone)]
 pub struct GameGuardian {
     pub package: String,
     pub path: String,
@@ -11,9 +17,9 @@ impl GameGuardian {
     }
 }
 
-pub async fn watchdog(mut channel: Channel<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn watchdog(_channel: Channel<Pipe<String>>) -> Result<(), Box<dyn std::error::Error>> {
     println!("Watching for GameGuardian...");
-    let mut gg: GameGuardian;
+    let gg: GameGuardian;
     match configure() {
         Ok(conf) => {
             gg = GameGuardian::new(conf.gg_package, conf.path, None);
@@ -21,58 +27,63 @@ pub async fn watchdog(mut channel: Channel<String>) -> Result<(), Box<dyn std::e
         }
         Err(e) => return Err(Box::new(e)),
     }
+    let inner_channel: Channel<Pipe<Option<u32>>> = Channel::new(32);
 
-    loop {
-        let pid = get_pid(&gg.package).await;
-        if let Some(pid) = pid {
-            gg.pid = Some(pid);
-            process_logic(pid).await;
-
-            if let Err(e) = wait_for_process_to_terminate(pid).await {
-                eprintln!("Error while waiting for GameGuardian termination: {}", e);
+    let watchdog = tokio::spawn({
+        let mut inner_channel = inner_channel.clone();
+        async move {
+            loop {
+                match get_pid(&gg.package).await {
+                    Some(pid) => {
+                        let _ = inner_channel
+                            .send(Pipe {
+                                msg: MsgType::GameGuardianGotPid,
+                                payload: Some(pid),
+                            })
+                            .await;
+                    }
+                    None => {
+                        let _ = inner_channel
+                            .send(Pipe {
+                                msg: MsgType::GameGuardianPidLost,
+                                payload: None,
+                            })
+                            .await;
+                    }
+                }
+                sleep(Duration::from_secs(1)).await;
             }
-
-            println!("GameGuardian::PID {} terminated. Resuming watchdog...", pid);
         }
+    });
 
-        // listen for incoming data
-        if let Some(message) = channel.receive().await {
-            println!("Received message from socket server: {}", message);
-            let _ = channel
-                .send(Pipe {
-                    msg: (format!("Processed message: {}", message)),
-                    payload: (format!("")),
-                })
-                .await?;
+    let gg_frida_impl = tokio::spawn({
+        let mut inner_channel = inner_channel.clone();
+        let mut prev_pid: Option<u32> = None;
+        async move {
+            loop {
+                if let Some(message) = inner_channel.receive().await {
+                    match message.payload {
+                        Some(pid) => {
+                            if prev_pid == Some(pid) {
+                                continue;
+                            }
+                            println!("GameGuardian@pid-{}", pid);
+                            prev_pid = Some(pid);
+                        }
+                        None => prev_pid = None,
+                    }
+                } else {
+                    //terminate
+                    break;
+                }
+                sleep(Duration::from_secs(1)).await;
+            }
         }
-
-        tokio::time::sleep(Duration::from_secs(1)).await; // Polling interval
-    }
-}
-
-async fn process_logic(_pid: u32) {
-    todo!();
-}
-
-async fn wait_for_process_to_terminate(pid: u32) -> Result<(), Box<dyn std::error::Error>> {
-    // Simulate waiting for a process to terminate
-    println!("Waiting for process PID {} to terminate...", pid);
-
-    // Replace this with actual process monitoring logic using system APIs or crates
-    // This is a simulation of waiting
-    tokio::time::sleep(Duration::from_secs(3)).await;
-
-    // Log process termination
-    println!("Process PID {} has terminated.", pid);
+    });
+    let _ = tokio::try_join!(watchdog, gg_frida_impl);
     Ok(())
 }
 
-use crate::{
-    configure, enumerate_processes, error, frida, get_pid, script, Channel, DeviceManager, Message,
-    Pipe, ScriptHandler, FRIDA,
-};
-
-use std::thread;
 fn invoke(pid: u32) -> frida::Result<Handler> {
     let device_manager = DeviceManager::obtain(&FRIDA);
     let local_device = device_manager.get_remote_device("localhost")?;
@@ -94,10 +105,6 @@ fn invoke(pid: u32) -> frida::Result<Handler> {
     let msg_handler = script.handle_message(Handler);
     if let Err(err) = msg_handler {
         panic!("{:?}", err);
-    }
-    for _ in 0..2 {
-        thread::sleep(Duration::from_secs(1));
-        println!("{:?}", script.list_exports().unwrap());
     }
 
     Ok(Handler)

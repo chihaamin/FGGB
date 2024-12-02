@@ -4,10 +4,21 @@ use tokio::sync::{
     mpsc::{self, channel, Receiver, Sender},
     Mutex,
 };
-
+#[derive(Debug, Clone)]
+pub enum MsgType {
+    Socket,
+    Process,
+    GameGuardian,
+    GameGuardianGotPid,
+    GameGuardianPidLost,
+    Frida,
+    FridaScript,
+    POST,
+    GET,
+}
 pub struct Pipe<T> {
-    pub msg: String, // todo! pre defined enum
-    pub payload: T,  // todo! change this into a buffer for fast data transfer
+    pub msg: MsgType,
+    pub payload: T,
 }
 impl<T> Clone for Pipe<T>
 where
@@ -22,60 +33,62 @@ where
 }
 impl<T> fmt::Display for Pipe<T>
 where
-    T: Clone + fmt::Display,
+    T: Clone + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Pipe: Message = {}, Payload = {}",
+            "Pipe: Message = {:?}, Payload = {:?}",
             self.msg, self.payload
         )
     }
 }
+impl<T> fmt::Debug for Pipe<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self.payload)
+    }
+}
 
 pub struct Channel<T: Clone> {
-    pub sender: Arc<Mutex<Sender<Pipe<T>>>>,
-    pub receiver: Arc<Mutex<Receiver<Pipe<T>>>>,
+    pub sender: Arc<Mutex<Sender<T>>>,
+    pub receiver: Arc<Mutex<Receiver<T>>>,
 }
 
 impl<T> Channel<T>
 where
-    T: Clone + fmt::Display,
+    T: Clone + std::fmt::Debug,
 {
-    // Create a new Channel
     pub fn new(buffer_size: usize) -> Self {
-        let (sender, receiver) = channel::<Pipe<T>>(buffer_size);
+        let (sender, receiver) = channel::<T>(buffer_size);
         Channel {
             sender: Arc::new(Mutex::new(sender)),
             receiver: Arc::new(Mutex::new(receiver)),
         }
     }
-    pub fn from(
-        sender: Arc<Mutex<Sender<Pipe<T>>>>,
-        receiver: Arc<Mutex<Receiver<Pipe<T>>>>,
-    ) -> Self {
+    pub fn from(sender: Arc<Mutex<Sender<T>>>, receiver: Arc<Mutex<Receiver<T>>>) -> Self {
         Channel { sender, receiver }
     }
 
-    pub async fn send(&mut self, msg: Pipe<T>) -> Result<(), mpsc::error::SendError<Pipe<T>>> {
-        match self.sender.lock().await.send(msg.clone()).await {
+    pub async fn send(&mut self, msg: T) -> Result<(), mpsc::error::SendError<T>> {
+        let tx = self.sender.lock().await;
+        match tx.send(msg.clone()).await {
             Ok(_) => Ok(()),
             Err(e) => {
-                eprintln!("Failed to send message to GameGuardian watchdog");
+                eprintln!("Failed to send message");
                 return Err(e);
             }
         }
-        // self.sender.send(value).await
     }
-    pub async fn receive(&mut self) -> Option<Pipe<T>> {
-        match self.receiver.lock().await.recv().await {
-            Some(msg) => {
-                println!("Received from GameGuardian watchdog: {}", msg);
-                return Some(msg);
-            }
-            None => return None,
+    pub async fn receive(&mut self) -> Option<T> {
+        // Lock the receiver first and immediately drop the lock
+        let mut rx = self.receiver.lock().await;
+        if let Some(msg) = rx.recv().await {
+            return Some(msg);
         }
-        // self.receiver.recv().await
+        None
     }
 }
 impl<T: Clone> Clone for Channel<T> {

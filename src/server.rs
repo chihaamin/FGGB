@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::{enumerate_processes, Channel, Pipe};
+use crate::{enumerate_processes, Channel, MsgType, Pipe};
 
-pub async fn run(channel: Channel<String>) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run(channel: Channel<Pipe<String>>) -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind("127.0.0.1:6699").await?;
     println!("Socket server running on 127.0.0.1:6699");
     // todo! restart on port in use
@@ -42,7 +42,7 @@ pub async fn run(channel: Channel<String>) -> Result<(), Box<dyn std::error::Err
                                         let message = String::from(app_pid);
                                         let _ = ch
                                             .send(Pipe {
-                                                msg: format!("PID"),
+                                                msg: MsgType::Socket,
                                                 payload: message.clone(),
                                             })
                                             .await;
@@ -75,7 +75,7 @@ pub async fn run(channel: Channel<String>) -> Result<(), Box<dyn std::error::Err
                     let message = String::from_utf8_lossy(&buf[..n]).to_string();
 
                     let _ = ch.send(Pipe {
-                        msg: format!("REQ"),
+                        msg: MsgType::POST,
                         payload: message,
                     });
 
@@ -83,7 +83,7 @@ pub async fn run(channel: Channel<String>) -> Result<(), Box<dyn std::error::Err
                         println!("Received message from GG watchdog: {}", message);
                         let _ = ch
                             .send(Pipe {
-                                msg: (format!("Watchdog message: {}", message)),
+                                msg: MsgType::Socket,
                                 payload: (format!("")),
                             })
                             .await;
